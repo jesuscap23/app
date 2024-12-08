@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">My BLE App</string>
+    <!-- Razones para permisos de Bluetooth -->
+    <string name="bluetooth_scan_permission_reason">Esta aplicación necesita escanear dispositivos Bluetooth cercanos.</string>
+    <string name="bluetooth_connect_permission_reason">Esta aplicación necesita conectarse a dispositivos Bluetooth cercanos.</string>
+    <string name="bluetooth_advertise_permission_reason">Esta aplicación necesita anunciarse como un dispositivo Bluetooth para la conectividad.</string>
+</resources>

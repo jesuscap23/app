@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'dart:io'; // Para detectar la versión del sistema operativo
+import 'package:device_info_plus/device_info_plus.dart';
 
 void main() {
   runApp(const MyApp());
@@ -9,16 +11,15 @@ void main() {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'Flutter BLE Demo',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const MyHomePage(title: 'Flutter BLE Home Page'),
     );
   }
 }
@@ -33,54 +34,121 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
-  final _flutterReactiveBle = FlutterReactiveBle();
-  final serviceUuid = Uuid.parse("180F");
+  final FlutterReactiveBle _flutterReactiveBle = FlutterReactiveBle();
+  final Uuid serviceUuid = Uuid.parse("180F");
   String _log = "";
 
-  Future<void> _requestLocationPermission() async {
-    final status = await Permission.location.request();
+  @override
+  void initState() {
+    super.initState();
+    _checkInitialPermissions();
+  }
 
-    if (status.isGranted) {
-      _connectToArduino();
-    } else {
-      _log += 'Location permission denied.\n';
+  Future<void> _checkInitialPermissions() async {
+    if (Platform.isAndroid) {
+      int androidVersion = int.parse(Platform.operatingSystemVersion.split(' ')[1]);
+      if (androidVersion >= 12) {
+        if (!await Permission.bluetoothScan.isGranted) {
+          _log += 'Bluetooth Scan permission missing. Please grant it.\n';
+        }
+        if (!await Permission.bluetoothConnect.isGranted) {
+          _log += 'Bluetooth Connect permission missing. Please grant it.\n';
+        }
+      } else {
+        if (!await Permission.locationWhenInUse.isGranted) {
+          _log += 'Location permission missing. Please grant it.\n';
+        }
+      }
       setState(() {});
     }
   }
 
-  void _incrementCounter() {
-    setState(() {
-      _log += 'plus 1\n';
-      _counter++;
-    });
+  Future<void> _requestPermissions() async {
+    _log += 'Requesting permissions...\n';
+    setState(() {});
+
+    if (Platform.isAndroid) {
+      _log += 'ANDROID...\n';
+     // int androidVersion = int.parse(Platform.operatingSystemVersion.split(' ')[1]);
+      final DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
+      final androidInfo = await deviceInfo.androidInfo;
+      final androidVersion = androidInfo.version.sdkInt;
+
+      _log += androidVersion.toString();
+
+      if (androidVersion >= 12) {
+        _log += 'ANDROID >=12 \n';
+        final advertisePermission = await Permission.bluetoothAdvertise.request();
+        _log += 'advert permition';
+
+        final bluetoothScanStatus = await Permission.bluetoothScan.request();
+        _log += 'scanned';
+
+        final bluetoothConnectStatus = await Permission.bluetoothConnect.request();
+        _log += 'connected';
+        if (bluetoothScanStatus.isGranted && bluetoothConnectStatus.isGranted) {
+          _log += 'Bluetooth permissions granted.\n';
+          _connectToArduino();
+        } else {
+          _log += 'Bluetooth permissions denied.\n';
+        }
+      } else {
+        _log += 'ANDROID <12 \n';
+        final locationStatus = await Permission.locationWhenInUse.request();
+        if (locationStatus.isGranted) {
+          _log += 'Location permission granted.\n';
+          _connectToArduino();
+        } else {
+          _log += 'Location permission denied.\n';
+        }
+      }
+    }else
+      {
+        _log += 'Not android.\n';
+      }
+    setState(() {});
   }
 
   void _connectToArduino() async {
     try {
-      if (await Permission.location.isGranted) {
-        _log += 'Connecting... to the device\n';
-        setState(() {});
-        final discoveredDevices = _flutterReactiveBle.scanForDevices(
-            withServices: [serviceUuid], scanMode: ScanMode.lowLatency).listen(
-          (device) {
-            if (device.name == "Nano33_IMU") {
-              _flutterReactiveBle
-                  .connectToDevice(id: device.id)
-                  .listen((state) {
+      _log += 'Scanning for devices...\n';
+      setState(() {});
+
+      _flutterReactiveBle
+          .scanForDevices(
+        withServices: [serviceUuid],
+        scanMode: ScanMode.lowLatency,
+      )
+          .timeout(const Duration(seconds: 10))
+          .listen(
+            (device) {
+          if (device.name == "Nano33_IMU") {
+            _log += 'Device found: ${device.name}\n';
+            setState(() {});
+
+            _flutterReactiveBle.connectToDevice(id: device.id).listen(
+                  (state) {
                 if (state.connectionState == DeviceConnectionState.connected) {
-                  _log += 'Connected to the device\n';
-                  setState(() {});
+                  _log += 'Connected to the device.\n';
+                } else if (state.connectionState == DeviceConnectionState.disconnected) {
+                  _log += 'Disconnected from the device.\n';
                 }
-              });
-            }
-          },
-        );
-      } else {
-        _requestLocationPermission();
-      }
+                setState(() {});
+              },
+              onError: (error) {
+                _log += 'Connection error: $error\n';
+                setState(() {});
+              },
+            );
+          }
+        },
+        onError: (error) {
+          _log += 'Scan error: $error\n';
+          setState(() {});
+        },
+      );
     } catch (e) {
-      _log += 'Cannot connect, exception occured: ${e.toString()}\n';
+      _log += 'Error: ${e.toString()}\n';
       setState(() {});
     }
   }
@@ -96,15 +164,8 @@ class _MyHomePageState extends State<MyHomePage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
-            const Text(
-              'You have pushed the button this many times:',
-            ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
             ElevatedButton(
-              onPressed: _requestLocationPermission,
+              onPressed: _requestPermissions,
               child: const Text('Connect to Arduino'),
             ),
             Expanded(
@@ -114,11 +175,6 @@ class _MyHomePageState extends State<MyHomePage> {
             ),
           ],
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
       ),
     );
   }

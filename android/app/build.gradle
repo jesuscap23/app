@@ -7,8 +7,10 @@ plugins {
 
 android {
     namespace "com.example.myapp" // Namespace declaration within the android block
-    compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    //compileSdk = flutter.compileSdkVersion
+    //ndkVersion = flutter.ndkVersion
+    compileSdk 34
+    ndkVersion "25.2.8713491"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8
