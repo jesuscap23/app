@@ -37,10 +37,20 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   final FlutterReactiveBle _flutterReactiveBle = FlutterReactiveBle();
   final Uuid serviceUuid = Uuid.parse("180F");
+  final Uuid accelCharacteristicUuid = Uuid.parse("2A19"); // Accelerometer Characteristic UUID
+  final Uuid gyroCharacteristicUuid = Uuid.parse("2A1A"); // Gyroscope Characteristic UUID
+  final Uuid magCharacteristicUuid = Uuid.parse("2A1B"); // Magnetometer Characteristic UUID
+
   String _log = "";
   DiscoveredDevice? _connectedDevice;
+  QualifiedCharacteristic? _accelCharacteristic;
+  QualifiedCharacteristic? _gyroCharacteristic;
+  QualifiedCharacteristic? _magCharacteristic;
   StreamSubscription<ConnectionStateUpdate>? _connectionSubscription;
   StreamSubscription<DiscoveredDevice>? _scanSubscription;
+  StreamSubscription<List<int>>? _accelDataSubscription;
+  StreamSubscription<List<int>>? _gyroDataSubscription;
+  StreamSubscription<List<int>>? _magDataSubscription;
 
   @override
   void initState() {
@@ -123,10 +133,34 @@ class _MyHomePageState extends State<MyHomePage> {
                 (state) {
               if (state.connectionState == DeviceConnectionState.connected) {
                 _log += 'Connected to the device.\n';
+
+                // Set up the characteristics for reading data
+                _accelCharacteristic = QualifiedCharacteristic(
+                  serviceId: serviceUuid,
+                  characteristicId: accelCharacteristicUuid,
+                  deviceId: device.id,
+                );
+
+                _gyroCharacteristic = QualifiedCharacteristic(
+                  serviceId: serviceUuid,
+                  characteristicId: gyroCharacteristicUuid,
+                  deviceId: device.id,
+                );
+
+                _magCharacteristic = QualifiedCharacteristic(
+                  serviceId: serviceUuid,
+                  characteristicId: magCharacteristicUuid,
+                  deviceId: device.id,
+                );
+
+                _subscribeToData();
               } else if (state.connectionState == DeviceConnectionState.disconnected) {
                 _log += 'Disconnected from the device.\n';
                 _connectedDevice = null;
                 _connectionSubscription?.cancel();
+                _accelDataSubscription?.cancel();
+                _gyroDataSubscription?.cancel();
+                _magDataSubscription?.cancel();
               }
               setState(() {});
             },
@@ -144,6 +178,56 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
+  void _subscribeToData() {
+    if (_accelCharacteristic != null) {
+      _accelDataSubscription = _flutterReactiveBle
+          .subscribeToCharacteristic(_accelCharacteristic!)
+          .listen(
+            (data) {
+          final receivedAccel = String.fromCharCodes(data);
+          _log += 'Accelerometer data: $receivedAccel\n';
+          setState(() {});
+        },
+        onError: (error) {
+          _log += 'Error receiving accelerometer data: $error\n';
+          setState(() {});
+        },
+      );
+    }
+
+    if (_gyroCharacteristic != null) {
+      _gyroDataSubscription = _flutterReactiveBle
+          .subscribeToCharacteristic(_gyroCharacteristic!)
+          .listen(
+            (data) {
+          final receivedGyro = String.fromCharCodes(data);
+          _log += 'Gyroscope data: $receivedGyro\n';
+          setState(() {});
+        },
+        onError: (error) {
+          _log += 'Error receiving gyroscope data: $error\n';
+          setState(() {});
+        },
+      );
+    }
+
+    if (_magCharacteristic != null) {
+      _magDataSubscription = _flutterReactiveBle
+          .subscribeToCharacteristic(_magCharacteristic!)
+          .listen(
+            (data) {
+          final receivedMag = String.fromCharCodes(data);
+          _log += 'Magnetometer data: $receivedMag\n';
+          setState(() {});
+        },
+        onError: (error) {
+          _log += 'Error receiving magnetometer data: $error\n';
+          setState(() {});
+        },
+      );
+    }
+  }
+
   void _disconnectFromArduino() {
     if (_connectionSubscription != null) {
       _connectionSubscription?.cancel();
@@ -159,12 +243,20 @@ class _MyHomePageState extends State<MyHomePage> {
     // Cancel scanning if it's still active
     _scanSubscription?.cancel();
     _scanSubscription = null;
+
+    // Cancel data subscriptions
+    _accelDataSubscription?.cancel();
+    _gyroDataSubscription?.cancel();
+    _magDataSubscription?.cancel();
   }
 
   @override
   void dispose() {
     _connectionSubscription?.cancel();
     _scanSubscription?.cancel();
+    _accelDataSubscription?.cancel();
+    _gyroDataSubscription?.cancel();
+    _magDataSubscription?.cancel();
     super.dispose();
   }
 
