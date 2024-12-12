@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'dart:io'; // For detecting the operating system
-import 'package:device_info_plus/device_info_plus.dart';
+import 'package:path_provider/path_provider.dart'; // For storage management
+import 'package:device_info_plus/device_info_plus.dart'; // For device info
 
 void main() {
   runApp(const MyApp());
@@ -42,6 +43,7 @@ class _MyHomePageState extends State<MyHomePage> {
   final Uuid magCharacteristicUuid = Uuid.parse("2A1B"); // Magnetometer Characteristic UUID
 
   String _log = "";
+  File? _logFile;
   DiscoveredDevice? _connectedDevice;
   QualifiedCharacteristic? _accelCharacteristic;
   QualifiedCharacteristic? _gyroCharacteristic;
@@ -60,7 +62,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
   Future<void> _checkInitialPermissions() async {
     if (Platform.isAndroid) {
-      int androidVersion = int.parse(Platform.operatingSystemVersion.split(' ')[1]);
+      final androidVersion = int.parse(Platform.operatingSystemVersion.split(' ')[1]);
       if (androidVersion >= 12) {
         if (!await Permission.bluetoothScan.isGranted) {
           _log += 'Bluetooth Scan permission missing. Please grant it.\n';
@@ -91,6 +93,7 @@ class _MyHomePageState extends State<MyHomePage> {
         final bluetoothConnectStatus = await Permission.bluetoothConnect.request();
         if (bluetoothScanStatus.isGranted && bluetoothConnectStatus.isGranted) {
           _log += 'Bluetooth permissions granted.\n';
+          await _prepareLogFile();
           _connectToArduino();
         } else {
           _log += 'Bluetooth permissions denied.\n';
@@ -99,13 +102,29 @@ class _MyHomePageState extends State<MyHomePage> {
         final locationStatus = await Permission.locationWhenInUse.request();
         if (locationStatus.isGranted) {
           _log += 'Location permission granted.\n';
+          await _prepareLogFile();
           _connectToArduino();
         } else {
           _log += 'Location permission denied.\n';
         }
       }
     } else {
-      _log += 'Not android.\n';
+      _log += 'Not Android.\n';
+    }
+    setState(() {});
+  }
+
+  Future<void> _prepareLogFile() async {
+    try {
+      final directory = await getApplicationDocumentsDirectory();
+      final logDir = Directory("${directory.path}/logs");
+      if (!logDir.existsSync()) {
+        logDir.createSync(recursive: true);
+      }
+      _logFile = File("${logDir.path}/received_data.log");
+      _log += 'Log file prepared at: ${_logFile?.path}\n';
+    } catch (e) {
+      _log += 'Failed to prepare log file: $e\n';
     }
     setState(() {});
   }
@@ -178,6 +197,10 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
+  void _appendToFile(String data) {
+    _logFile?.writeAsStringSync(data, mode: FileMode.append);
+  }
+
   void _subscribeToData() {
     if (_accelCharacteristic != null) {
       _accelDataSubscription = _flutterReactiveBle
@@ -185,11 +208,15 @@ class _MyHomePageState extends State<MyHomePage> {
           .listen(
             (data) {
           final receivedAccel = String.fromCharCodes(data);
-          _log += 'Accelerometer data: $receivedAccel\n';
+          final logEntry = 'Accelerometer data: $receivedAccel\n';
+          _log += logEntry;
+          _appendToFile(logEntry);
           setState(() {});
         },
         onError: (error) {
-          _log += 'Error receiving accelerometer data: $error\n';
+          final logEntry = 'Error receiving accelerometer data: $error\n';
+          _log += logEntry;
+          _appendToFile(logEntry);
           setState(() {});
         },
       );
@@ -201,11 +228,15 @@ class _MyHomePageState extends State<MyHomePage> {
           .listen(
             (data) {
           final receivedGyro = String.fromCharCodes(data);
-          _log += 'Gyroscope data: $receivedGyro\n';
+          final logEntry = 'Gyroscope data: $receivedGyro\n';
+          _log += logEntry;
+          _appendToFile(logEntry);
           setState(() {});
         },
         onError: (error) {
-          _log += 'Error receiving gyroscope data: $error\n';
+          final logEntry = 'Error receiving gyroscope data: $error\n';
+          _log += logEntry;
+          _appendToFile(logEntry);
           setState(() {});
         },
       );
@@ -217,11 +248,15 @@ class _MyHomePageState extends State<MyHomePage> {
           .listen(
             (data) {
           final receivedMag = String.fromCharCodes(data);
-          _log += 'Magnetometer data: $receivedMag\n';
+          final logEntry = 'Magnetometer data: $receivedMag\n';
+          _log += logEntry;
+          _appendToFile(logEntry);
           setState(() {});
         },
         onError: (error) {
-          _log += 'Error receiving magnetometer data: $error\n';
+          final logEntry = 'Error receiving magnetometer data: $error\n';
+          _log += logEntry;
+          _appendToFile(logEntry);
           setState(() {});
         },
       );
